@@ -1,0 +1,38 @@
+package com.penikq.fpsboost;
+
+import com.mojang.blaze3d.platform.InputConstants;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.resources.Identifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class FpsBoostClient implements ClientModInitializer {
+	public static final String MOD_ID = "fpsboost";
+	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+
+	private static KeyMapping openMenuKey;
+
+	@Override
+	public void onInitializeClient() {
+		MobConfig.load();
+
+		KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main"));
+		openMenuKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+				"key.fpsboost.open_menu",
+				InputConstants.Type.KEYSYM,
+				InputConstants.KEY_H,
+				category
+		));
+
+		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			while (openMenuKey.consumeClick()) {
+				if (client.screen == null) {
+					client.setScreen(new FpsBoostScreen());
+				}
+			}
+		});
+	}
+}

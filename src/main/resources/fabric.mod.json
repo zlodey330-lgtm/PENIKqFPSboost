@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"id": "fpsboost",
+	"version": "${version}",
+	"name": "PENIKqFPSboost",
+	"description": "Меню на H: настройка дальности отрисовки каждого моба и Дракона Края для повышения FPS.",
+	"authors": ["PENIKq"],
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["com.penikq.fpsboost.FpsBoostClient"]
+	},
+	"mixins": ["fpsboost.mixins.json"],
+	"depends": {
+		"fabricloader": ">=0.18.0",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
