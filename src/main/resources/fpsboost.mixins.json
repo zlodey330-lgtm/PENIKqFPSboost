@@ -3,7 +3,8 @@
 	"package": "com.penikq.fpsboost.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
-		"EntityRendererMixin"
+		"EntityRendererMixin",
+		"EntityRenderDispatcherMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

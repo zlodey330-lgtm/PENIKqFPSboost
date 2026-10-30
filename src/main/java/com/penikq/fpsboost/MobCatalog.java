@@ -40,7 +40,17 @@ public final class MobCatalog {
 	private MobCatalog() {
 	}
 
-	public static List<Mob> build() {
+	private static List<Mob> cache;
+
+	/** Список строится один раз при первом открытии меню, а не при запуске игры. */
+	public static List<Mob> get() {
+		if (cache == null) {
+			cache = build();
+		}
+		return cache;
+	}
+
+	private static List<Mob> build() {
 		List<Mob> mobs = new ArrayList<>();
 		for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
 			if (type == EntityType.PLAYER || !type.canSummon()) {

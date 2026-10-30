@@ -15,6 +15,10 @@ public class FpsBoostClient implements ClientModInitializer {
 
 	private static KeyMapping openMenuKey;
 
+	public static KeyMapping openMenuKey() {
+		return openMenuKey;
+	}
+
 	@Override
 	public void onInitializeClient() {
 		MobConfig.load();
