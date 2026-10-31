@@ -14,8 +14,9 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Меню мода (клавиша H): 3 вкладки. Вкладки 1 и 2 пока показывают "Скоро...",
- * вкладка 3 "Оптимизация мобов" содержит список мобов с ползунками дальности.
+ * Меню мода (клавиша H): 4 вкладки. Вкладка 1 пока показывает "Скоро...",
+ * вкладка 2 "Умная отрисовка", вкладка 3 "Оптимизация мобов" (ползунки дальности),
+ * вкладка 4 "Частицы и мир" (убрать любую частицу, небо, облака, погоду).
  */
 public class FpsBoostScreen extends Screen {
 
@@ -32,9 +33,9 @@ public class FpsBoostScreen extends Screen {
 	private static final int ROW_HOVER = 0xFF232330;
 	private static final int TRACK = 0xFF0C0C11;
 
-	private static final String[] TABS = {"Вкладка 1", "Умная отрисовка", "Оптимизация мобов"};
+	private static final String[] TABS = {"Вкладка 1", "Умная отрисовка", "Оптимизация мобов", "Частицы и мир"};
 
-	private static final int PANEL_W = 380;
+	private static final int PANEL_W = 460;
 	private static final int PANEL_H = 250;
 	private static final int TAB_H = 24;
 	private static final int ROW_H = 22;
@@ -53,6 +54,13 @@ public class FpsBoostScreen extends Screen {
 	private boolean draggingScrollbar = false;
 	private double scrollGrabOffset = 0;
 	private boolean changed = false;
+
+	// Вкладка 4 "Частицы и мир"
+	private EditBox pSearch;
+	private final List<ParticleCatalog.Entry> pItems = new ArrayList<>();
+	private double pScroll = 0;
+	private boolean pDraggingScrollbar = false;
+	private double pGrabOffset = 0;
 
 	// Геометрия, пересчитывается в init()
 	private int px, py;
@@ -76,15 +84,44 @@ public class FpsBoostScreen extends Screen {
 		this.addRenderableWidget(search);
 		search.visible = tab == 2;
 		rebuild();
+
+		pSearch = new EditBox(this.font, px + 12, pRowY(), PANEL_W - 24 - 144 - 6, 16, Component.literal("Поиск частицы"));
+		pSearch.setHint(Component.literal("Поиск частицы..."));
+		pSearch.setMaxLength(32);
+		pSearch.setResponder(s -> {
+			pScroll = 0;
+			rebuildParticles();
+		});
+		this.addRenderableWidget(pSearch);
+		pSearch.visible = tab == 3;
+		rebuildParticles();
 	}
 
 	private void switchTab(int idx) {
 		tab = idx;
 		search.setFocused(false);
 		search.visible = tab == 2;
+		pSearch.setFocused(false);
+		pSearch.visible = tab == 3;
 		dragging = null;
 		draggingSimplify = false;
 		draggingScrollbar = false;
+		pDraggingScrollbar = false;
+	}
+
+	private void rebuildParticles() {
+		pItems.clear();
+		String q = pSearch == null ? "" : pSearch.getValue().trim().toLowerCase(Locale.ROOT);
+		for (ParticleCatalog.Entry e : ParticleCatalog.get()) {
+			if (q.isEmpty() || e.name().toLowerCase(Locale.ROOT).contains(q)
+					|| e.id().toLowerCase(Locale.ROOT).contains(q)) {
+				pItems.add(e);
+			}
+		}
+	}
+
+	private static boolean inside(double mx, double my, int x, int y, int w, int h) {
+		return mx >= x && mx < x + w && my >= y && my < y + h;
 	}
 
 	// ---------- полоса прокрутки ----------
@@ -188,7 +225,9 @@ public class FpsBoostScreen extends Screen {
 			}
 		}
 
-		if (tab == 2) {
+		if (tab == 3) {
+			renderParticlesTab(g, mouseX, mouseY, delta);
+		} else if (tab == 2) {
 			renderMobsTab(g, mouseX, mouseY, delta);
 		} else if (tab == 1) {
 			renderSmartTab(g, mouseX, mouseY);
@@ -288,6 +327,146 @@ public class FpsBoostScreen extends Screen {
 		MobConfig.simplifyDistance = MobConfig.SIMPLIFY_MIN
 				+ (int) Math.round(t * (MobConfig.SIMPLIFY_MAX - MobConfig.SIMPLIFY_MIN));
 		changed = true;
+	}
+
+	// ---------- вкладка 4: Частицы и мир ----------
+
+	private static final int PROW_H = 20;
+	private static final int CHIP_H = 26;
+	private static final String[] WORLD_LABELS = {"Небо", "Светила и звёзды", "Облака", "Дождь и снег"};
+
+	private int chipsY() {
+		return py + TAB_H + 8;
+	}
+
+	private int chipW() {
+		return (listW() - 18) / 4;
+	}
+
+	private int chipX(int i) {
+		return listX() + i * (chipW() + 6);
+	}
+
+	private int pRowY() {
+		return chipsY() + CHIP_H + 8;
+	}
+
+	private int pListY() {
+		return pRowY() + 22;
+	}
+
+	private int pListH() {
+		return py + PANEL_H - pListY() - 8;
+	}
+
+	private double pMaxScroll() {
+		return Math.max(0, pItems.size() * PROW_H - pListH());
+	}
+
+	private int pThumbH() {
+		int content = Math.max(1, pItems.size() * PROW_H);
+		return Math.max(20, (int) (pListH() * (pListH() / (double) content)));
+	}
+
+	private int pThumbY() {
+		double max = pMaxScroll();
+		if (max <= 0) {
+			return pListY();
+		}
+		return pListY() + (int) ((pListH() - pThumbH()) * (pScroll / max));
+	}
+
+	private void pScrollToThumbTop(double top) {
+		double track = pListH() - pThumbH();
+		if (track <= 0) {
+			return;
+		}
+		pScroll = Mth.clamp((top - pListY()) / track, 0.0, 1.0) * pMaxScroll();
+	}
+
+	private boolean worldFlag(int i) {
+		return switch (i) {
+			case 0 -> MobConfig.hideSky;
+			case 1 -> MobConfig.hideSunMoonStars;
+			case 2 -> MobConfig.hideClouds;
+			default -> MobConfig.hideWeather;
+		};
+	}
+
+	private void toggleWorldFlag(int i) {
+		switch (i) {
+			case 0 -> MobConfig.hideSky = !MobConfig.hideSky;
+			case 1 -> MobConfig.hideSunMoonStars = !MobConfig.hideSunMoonStars;
+			case 2 -> MobConfig.hideClouds = !MobConfig.hideClouds;
+			default -> MobConfig.hideWeather = !MobConfig.hideWeather;
+		}
+		changed = true;
+	}
+
+	private void renderParticlesTab(GuiGraphics g, int mouseX, int mouseY, float delta) {
+		// переключатели мира
+		for (int i = 0; i < WORLD_LABELS.length; i++) {
+			int x = chipX(i), y = chipsY(), w = chipW();
+			boolean off = worldFlag(i);
+			boolean hover = inside(mouseX, mouseY, x, y, w, CHIP_H);
+			g.fill(x, y, x + w, y + CHIP_H, hover ? ROW_HOVER : ROW);
+			g.fill(x, y, x + 3, y + CHIP_H, off ? ACCENT : PANEL_BORDER);
+			g.drawString(this.font, WORLD_LABELS[i], x + 8, y + 5, TEXT, false);
+			g.drawString(this.font, off ? "убрано" : "есть", x + 8, y + 15, off ? ACCENT : TEXT_DIM, false);
+		}
+
+		// поиск и кнопки
+		pSearch.render(g, mouseX, mouseY, delta);
+		int by = pRowY();
+		int b2 = px + PANEL_W - 12 - 70;
+		int b1 = b2 - 4 - 70;
+		g.fill(b1, by, b1 + 70, by + 16, inside(mouseX, mouseY, b1, by, 70, 16) ? ACCENT : ACCENT_DARK);
+		g.drawCenteredString(this.font, "Откл. все", b1 + 35, by + 4, TEXT);
+		g.fill(b2, by, b2 + 70, by + 16, inside(mouseX, mouseY, b2, by, 70, 16) ? 0xFF2E2E3A : 0xFF24242E);
+		g.drawCenteredString(this.font, "Вкл. все", b2 + 35, by + 4, TEXT);
+
+		// список частиц
+		int lx = listX(), ly = pListY(), lw = listW(), lh = pListH();
+		int rowW = lw - SCROLLBAR_W - 4;
+		g.enableScissor(lx, ly, lx + lw, ly + lh);
+		int y = ly - (int) pScroll;
+		for (ParticleCatalog.Entry e : pItems) {
+			if (y + PROW_H >= ly && y <= ly + lh) {
+				boolean hidden = MobConfig.isParticleHidden(e.type());
+				boolean hover = mouseY >= ly && mouseY < ly + lh && inside(mouseX, mouseY, lx, y, rowW, PROW_H - 2);
+				g.fill(lx, y, lx + rowW, y + PROW_H - 2, hover ? ROW_HOVER : ROW);
+				g.drawString(this.font, e.name(), lx + 8, y + 5, hidden ? TEXT_DIM : TEXT, false);
+				g.drawString(this.font, e.id(), lx + 190, y + 5, 0xFF5C5C6C, false);
+				int tx = lx + rowW - 8 - 40;
+				g.fill(tx, y + 1, tx + 40, y + PROW_H - 3, hidden ? ACCENT_DARK : 0xFF24402C);
+				g.drawCenteredString(this.font, hidden ? "ВЫКЛ" : "ВКЛ", tx + 20, y + 5,
+						hidden ? TEXT : 0xFF7DDC8C);
+			}
+			y += PROW_H;
+		}
+		g.disableScissor();
+
+		if (pItems.isEmpty()) {
+			g.drawCenteredString(this.font, "Ничего не найдено", px + PANEL_W / 2, ly + 20, TEXT_DIM);
+		}
+
+		if (pMaxScroll() > 0) {
+			int sbx = lx + lw - SCROLLBAR_W;
+			int ty = pThumbY();
+			int th = pThumbH();
+			boolean overThumb = inside(mouseX, mouseY, sbx - 4, ty, SCROLLBAR_W + 6, th);
+			g.fill(sbx, ly, sbx + SCROLLBAR_W, ly + lh, TRACK);
+			g.fill(sbx, ty, sbx + SCROLLBAR_W, ty + th, (pDraggingScrollbar || overThumb) ? 0xFFF04A60 : ACCENT);
+		}
+	}
+
+	private ParticleCatalog.Entry particleAt(double mx, double my) {
+		int rowW = listW() - SCROLLBAR_W - 4;
+		if (!inside(mx, my, listX(), pListY(), rowW, pListH())) {
+			return null;
+		}
+		int idx = (int) ((my - pListY() + pScroll) / PROW_H);
+		return idx >= 0 && idx < pItems.size() ? pItems.get(idx) : null;
 	}
 
 	private void renderMobsTab(GuiGraphics g, int mouseX, int mouseY, float delta) {
@@ -428,6 +607,60 @@ public class FpsBoostScreen extends Screen {
 				}
 			}
 
+			if (tab == 3) {
+				// переключатели мира
+				for (int i = 0; i < WORLD_LABELS.length; i++) {
+					if (inside(mx, my, chipX(i), chipsY(), chipW(), CHIP_H)) {
+						toggleWorldFlag(i);
+						return true;
+					}
+				}
+
+				// "Откл. все" и "Вкл. все"
+				int by = pRowY();
+				int b2 = px + PANEL_W - 12 - 70;
+				int b1 = b2 - 4 - 70;
+				if (inside(mx, my, b1, by, 70, 16)) {
+					List<net.minecraft.core.particles.ParticleType<?>> types = new ArrayList<>();
+					for (ParticleCatalog.Entry e : ParticleCatalog.get()) {
+						types.add(e.type());
+					}
+					MobConfig.hideAllParticles(types);
+					changed = true;
+					return true;
+				}
+				if (inside(mx, my, b2, by, 70, 16)) {
+					MobConfig.showAllParticles();
+					changed = true;
+					return true;
+				}
+
+				// полоса прокрутки списка частиц
+				if (pMaxScroll() > 0) {
+					int sbx = listX() + listW() - SCROLLBAR_W;
+					if (inside(mx, my, sbx - 4, pListY(), SCROLLBAR_W + 6, pListH())) {
+						int ty = pThumbY();
+						int th = pThumbH();
+						if (my >= ty && my < ty + th) {
+							pGrabOffset = my - ty;
+						} else {
+							pGrabOffset = th / 2.0;
+							pScrollToThumbTop(my - pGrabOffset);
+						}
+						pDraggingScrollbar = true;
+						return true;
+					}
+				}
+
+				// клик по частице: убрать или вернуть
+				ParticleCatalog.Entry hitParticle = particleAt(mx, my);
+				if (hitParticle != null) {
+					MobConfig.setParticleHidden(hitParticle.type(), !MobConfig.isParticleHidden(hitParticle.type()));
+					changed = true;
+					return true;
+				}
+			}
+
 			if (tab == 2) {
 				// кнопка "Конфиги"
 				int cbx = px + PANEL_W - 12 - 62;
@@ -522,6 +755,10 @@ public class FpsBoostScreen extends Screen {
 
 	@Override
 	public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+		if (pDraggingScrollbar) {
+			pScrollToThumbTop(event.y() - pGrabOffset);
+			return true;
+		}
 		if (draggingScrollbar) {
 			scrollToThumbTop(event.y() - scrollGrabOffset);
 			return true;
@@ -539,6 +776,10 @@ public class FpsBoostScreen extends Screen {
 
 	@Override
 	public boolean mouseReleased(MouseButtonEvent event) {
+		if (pDraggingScrollbar) {
+			pDraggingScrollbar = false;
+			return true;
+		}
 		if (draggingScrollbar) {
 			draggingScrollbar = false;
 			return true;
@@ -556,6 +797,10 @@ public class FpsBoostScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+		if (tab == 3) {
+			pScroll = Mth.clamp(pScroll - scrollY * 18, 0, pMaxScroll());
+			return true;
+		}
 		if (tab == 2) {
 			scroll = Mth.clamp(scroll - scrollY * 18, 0, maxScroll());
 			return true;
@@ -568,7 +813,7 @@ public class FpsBoostScreen extends Screen {
 		// Клавиша открытия (та, что выбрана в настройках управления) закрывает меню,
 		// но только когда не печатаем в поиске
 		int bound = KeyBindingHelper.getBoundKeyOf(FpsBoostClient.openMenuKey()).getValue();
-		if (event.key() == bound && !search.isFocused()) {
+		if (event.key() == bound && !search.isFocused() && !pSearch.isFocused()) {
 			this.onClose();
 			return true;
 		}

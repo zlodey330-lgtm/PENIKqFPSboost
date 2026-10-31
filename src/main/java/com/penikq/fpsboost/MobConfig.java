@@ -5,6 +5,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.fabricmc.loader.api.FabricLoader;
+import com.google.gson.JsonArray;
+import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
 
@@ -17,8 +19,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -43,7 +47,40 @@ public final class MobConfig {
 	/** Не рисовать мобов, скрытых за блоками. */
 	public static boolean occlusionCull = false;
 
+	// Вкладка 4 "Частицы и мир": true = убрать
+	public static boolean hideSky = false;
+	public static boolean hideSunMoonStars = false;
+	public static boolean hideClouds = false;
+	public static boolean hideWeather = false;
+	private static final Set<ParticleType<?>> HIDDEN_PARTICLES = new HashSet<>();
+
 	private MobConfig() {
+	}
+
+	// ---------- частицы ----------
+
+	public static boolean hasHiddenParticles() {
+		return !HIDDEN_PARTICLES.isEmpty();
+	}
+
+	public static boolean isParticleHidden(ParticleType<?> type) {
+		return HIDDEN_PARTICLES.contains(type);
+	}
+
+	public static void setParticleHidden(ParticleType<?> type, boolean hidden) {
+		if (hidden) {
+			HIDDEN_PARTICLES.add(type);
+		} else {
+			HIDDEN_PARTICLES.remove(type);
+		}
+	}
+
+	public static void hideAllParticles(Collection<ParticleType<?>> types) {
+		HIDDEN_PARTICLES.addAll(types);
+	}
+
+	public static void showAllParticles() {
+		HIDDEN_PARTICLES.clear();
 	}
 
 	private static Path file() {
@@ -101,6 +138,15 @@ public final class MobConfig {
 		root.addProperty("simplifyFar", simplifyFar);
 		root.addProperty("simplifyDistance", simplifyDistance);
 		root.addProperty("occlusionCull", occlusionCull);
+		root.addProperty("hideSky", hideSky);
+		root.addProperty("hideSunMoonStars", hideSunMoonStars);
+		root.addProperty("hideClouds", hideClouds);
+		root.addProperty("hideWeather", hideWeather);
+		JsonArray hidden = new JsonArray();
+		for (ParticleType<?> type : HIDDEN_PARTICLES) {
+			hidden.add(BuiltInRegistries.PARTICLE_TYPE.getKey(type).toString());
+		}
+		root.add("hiddenParticles", hidden);
 		root.add("mobDistances", distances);
 		return root;
 	}
@@ -115,6 +161,20 @@ public final class MobConfig {
 		}
 		if (root.has("occlusionCull")) {
 			occlusionCull = root.get("occlusionCull").getAsBoolean();
+		}
+		hideSky = root.has("hideSky") && root.get("hideSky").getAsBoolean();
+		hideSunMoonStars = root.has("hideSunMoonStars") && root.get("hideSunMoonStars").getAsBoolean();
+		hideClouds = root.has("hideClouds") && root.get("hideClouds").getAsBoolean();
+		hideWeather = root.has("hideWeather") && root.get("hideWeather").getAsBoolean();
+		HIDDEN_PARTICLES.clear();
+		if (root.has("hiddenParticles")) {
+			Set<String> ids = new HashSet<>();
+			root.getAsJsonArray("hiddenParticles").forEach(e -> ids.add(e.getAsString()));
+			for (ParticleType<?> type : BuiltInRegistries.PARTICLE_TYPE) {
+				if (ids.contains(BuiltInRegistries.PARTICLE_TYPE.getKey(type).toString())) {
+					HIDDEN_PARTICLES.add(type);
+				}
+			}
 		}
 		if (!root.has("mobDistances")) {
 			return;
