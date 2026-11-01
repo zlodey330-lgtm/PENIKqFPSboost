@@ -21,6 +21,7 @@ public class FpsBoostClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		long startNs = System.nanoTime();
 		MobConfig.load();
 
 		KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main"));
@@ -38,5 +39,8 @@ public class FpsBoostClient implements ClientModInitializer {
 				}
 			}
 		});
+
+		// Замер: сколько времени мод тратит на свой запуск (смотри в latest.log).
+		LOGGER.info("[PENIKqFPSboost] запуск мода занял {} мс", (System.nanoTime() - startNs) / 1_000_000);
 	}
 }

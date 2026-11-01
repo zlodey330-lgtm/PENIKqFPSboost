@@ -36,7 +36,7 @@ public class FpsBoostScreen extends Screen {
 	private static final String[] TABS = {"Вкладка 1", "Умная отрисовка", "Оптимизация мобов", "Частицы и мир"};
 
 	private static final int PANEL_W = 460;
-	private static final int PANEL_H = 250;
+	private static final int PANEL_H = 264;
 	private static final int TAB_H = 24;
 	private static final int ROW_H = 22;
 	private static final int HEADING_H = 24;
@@ -351,8 +351,20 @@ public class FpsBoostScreen extends Screen {
 		return chipsY() + CHIP_H + 8;
 	}
 
-	private int pListY() {
+	private int blockRowY() {
 		return pRowY() + 22;
+	}
+
+	private int blockToggleX() {
+		return listX() + listW() - 8 - 40;
+	}
+
+	private int blockExceptionsX() {
+		return blockToggleX() - 4 - 120;
+	}
+
+	private int pListY() {
+		return blockRowY() + 28;
 	}
 
 	private int pListH() {
@@ -424,6 +436,24 @@ public class FpsBoostScreen extends Screen {
 		g.drawCenteredString(this.font, "Откл. все", b1 + 35, by + 4, TEXT);
 		g.fill(b2, by, b2 + 70, by + 16, inside(mouseX, mouseY, b2, by, 70, 16) ? 0xFF2E2E3A : 0xFF24242E);
 		g.drawCenteredString(this.font, "Вкл. все", b2 + 35, by + 4, TEXT);
+
+		// строка "Частицы блоков": одна кнопка на все частицы от блоков + исключения
+		int brx = listX(), bry = blockRowY(), brw = listW();
+		g.fill(brx, bry, brx + brw, bry + 22, ROW);
+		g.fill(brx, bry, brx + 3, bry + 22, MobConfig.hideBlockParticles ? ACCENT : PANEL_BORDER);
+		g.drawString(this.font, Component.literal("Частицы блоков").withStyle(s -> s.withBold(true)),
+				brx + 8, bry + 7, TEXT, false);
+		g.drawString(this.font, "(ломание, удары, бег)", brx + 108, bry + 7, TEXT_DIM, false);
+		int exX = blockExceptionsX(), tgX = blockToggleX();
+		boolean exHover = inside(mouseX, mouseY, exX, bry + 3, 120, 16);
+		g.fill(exX, bry + 3, exX + 120, bry + 19, exHover ? 0xFF2E2E3A : 0xFF24242E);
+		g.drawCenteredString(this.font, "Исключения (" + MobConfig.blockExceptionCount() + ")",
+				exX + 60, bry + 7, TEXT);
+		boolean hidden = MobConfig.hideBlockParticles;
+		boolean tgHover = inside(mouseX, mouseY, tgX, bry + 3, 40, 16);
+		g.fill(tgX, bry + 3, tgX + 40, bry + 19,
+				hidden ? (tgHover ? 0xFFF04A60 : ACCENT) : (tgHover ? 0xFF2E5236 : 0xFF24402C));
+		g.drawCenteredString(this.font, hidden ? "ВЫКЛ" : "ВКЛ", tgX + 20, bry + 7, hidden ? TEXT : 0xFF7DDC8C);
 
 		// список частиц
 		int lx = listX(), ly = pListY(), lw = listW(), lh = pListH();
@@ -626,12 +656,30 @@ public class FpsBoostScreen extends Screen {
 						types.add(e.type());
 					}
 					MobConfig.hideAllParticles(types);
+					MobConfig.hideBlockParticles = true;
 					changed = true;
 					return true;
 				}
 				if (inside(mx, my, b2, by, 70, 16)) {
 					MobConfig.showAllParticles();
+					MobConfig.hideBlockParticles = false;
 					changed = true;
+					return true;
+				}
+
+				// строка "Частицы блоков"
+				int bry = blockRowY();
+				if (inside(mx, my, blockToggleX(), bry + 3, 40, 16)) {
+					MobConfig.hideBlockParticles = !MobConfig.hideBlockParticles;
+					changed = true;
+					return true;
+				}
+				if (inside(mx, my, blockExceptionsX(), bry + 3, 120, 16)) {
+					if (changed) {
+						MobConfig.save();
+						changed = false;
+					}
+					this.minecraft.setScreen(new BlockExceptionsScreen(this));
 					return true;
 				}
 

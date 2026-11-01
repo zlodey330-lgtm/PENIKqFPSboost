@@ -9,6 +9,7 @@ import com.google.gson.JsonArray;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.level.block.Block;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -54,7 +55,49 @@ public final class MobConfig {
 	public static boolean hideWeather = false;
 	private static final Set<ParticleType<?>> HIDDEN_PARTICLES = new HashSet<>();
 
+	/** Убрать ВСЕ частицы от блоков (ломание, удары, бег, падение) одной кнопкой. */
+	public static boolean hideBlockParticles = false;
+	/** Важные блоки, частицы которых показываются, даже когда общая кнопка включена. */
+	private static final Set<String> BLOCK_EXCEPTION_IDS = new HashSet<>();
+	/** Кэш: те же исключения, но как объекты блоков. Строится при первом обращении. */
+	private static Set<Block> exceptionBlocks = null;
+
 	private MobConfig() {
+	}
+
+	// ---------- частицы блоков ----------
+
+	public static boolean isBlockExceptionId(String id) {
+		return BLOCK_EXCEPTION_IDS.contains(id);
+	}
+
+	public static void setBlockExceptionId(String id, boolean on) {
+		if (on) {
+			BLOCK_EXCEPTION_IDS.add(id);
+		} else {
+			BLOCK_EXCEPTION_IDS.remove(id);
+		}
+		exceptionBlocks = null;
+	}
+
+	public static int blockExceptionCount() {
+		return BLOCK_EXCEPTION_IDS.size();
+	}
+
+	public static boolean isBlockException(Block block) {
+		if (BLOCK_EXCEPTION_IDS.isEmpty()) {
+			return false;
+		}
+		if (exceptionBlocks == null) {
+			Set<Block> set = new HashSet<>();
+			for (Block b : BuiltInRegistries.BLOCK) {
+				if (BLOCK_EXCEPTION_IDS.contains(BuiltInRegistries.BLOCK.getKey(b).toString())) {
+					set.add(b);
+				}
+			}
+			exceptionBlocks = set;
+		}
+		return exceptionBlocks.contains(block);
 	}
 
 	// ---------- частицы ----------
@@ -147,6 +190,12 @@ public final class MobConfig {
 			hidden.add(BuiltInRegistries.PARTICLE_TYPE.getKey(type).toString());
 		}
 		root.add("hiddenParticles", hidden);
+		root.addProperty("hideBlockParticles", hideBlockParticles);
+		JsonArray exceptions = new JsonArray();
+		for (String id : BLOCK_EXCEPTION_IDS) {
+			exceptions.add(id);
+		}
+		root.add("blockParticleExceptions", exceptions);
 		root.add("mobDistances", distances);
 		return root;
 	}
@@ -166,6 +215,12 @@ public final class MobConfig {
 		hideSunMoonStars = root.has("hideSunMoonStars") && root.get("hideSunMoonStars").getAsBoolean();
 		hideClouds = root.has("hideClouds") && root.get("hideClouds").getAsBoolean();
 		hideWeather = root.has("hideWeather") && root.get("hideWeather").getAsBoolean();
+		hideBlockParticles = root.has("hideBlockParticles") && root.get("hideBlockParticles").getAsBoolean();
+		BLOCK_EXCEPTION_IDS.clear();
+		exceptionBlocks = null;
+		if (root.has("blockParticleExceptions")) {
+			root.getAsJsonArray("blockParticleExceptions").forEach(e -> BLOCK_EXCEPTION_IDS.add(e.getAsString()));
+		}
 		HIDDEN_PARTICLES.clear();
 		if (root.has("hiddenParticles")) {
 			Set<String> ids = new HashSet<>();
