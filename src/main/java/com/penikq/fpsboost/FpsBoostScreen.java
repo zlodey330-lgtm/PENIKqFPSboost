@@ -449,11 +449,12 @@ public class FpsBoostScreen extends Screen {
 		g.fill(exX, bry + 3, exX + 120, bry + 19, exHover ? 0xFF2E2E3A : 0xFF24242E);
 		g.drawCenteredString(this.font, "Исключения (" + MobConfig.blockExceptionCount() + ")",
 				exX + 60, bry + 7, TEXT);
-		boolean hidden = MobConfig.hideBlockParticles;
+		boolean blocksOff = MobConfig.hideBlockParticles;
 		boolean tgHover = inside(mouseX, mouseY, tgX, bry + 3, 40, 16);
 		g.fill(tgX, bry + 3, tgX + 40, bry + 19,
-				hidden ? (tgHover ? 0xFFF04A60 : ACCENT) : (tgHover ? 0xFF2E5236 : 0xFF24402C));
-		g.drawCenteredString(this.font, hidden ? "ВЫКЛ" : "ВКЛ", tgX + 20, bry + 7, hidden ? TEXT : 0xFF7DDC8C);
+				blocksOff ? (tgHover ? 0xFFF04A60 : ACCENT) : (tgHover ? 0xFF2E5236 : 0xFF24402C));
+		g.drawCenteredString(this.font, blocksOff ? "ВЫКЛ" : "ВКЛ", tgX + 20, bry + 7,
+				blocksOff ? TEXT : 0xFF7DDC8C);
 
 		// список частиц
 		int lx = listX(), ly = pListY(), lw = listW(), lh = pListH();
