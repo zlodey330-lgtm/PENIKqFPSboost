@@ -8,7 +8,17 @@
 		"ParticleEngineMixin",
 		"SkyRendererMixin",
 		"CloudRendererMixin",
-		"WeatherEffectRendererMixin"
+		"WeatherEffectRendererMixin",
+		"ScreenEffectRendererMixin",
+		"GameRendererMixin",
+		"LevelRendererMixin",
+		"ItemFoilMixin",
+		"FogEnvironmentMixin",
+		"SpriteContentsMixin",
+		"AnimationStateMixin",
+		"ItemInHandRendererMixin",
+		"GuiOverlayMixin",
+		"SignTextMixin"
 	],
 	"injectors": {
 		"defaultRequire": 0

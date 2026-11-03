@@ -14,9 +14,14 @@ public class FpsBoostClient implements ClientModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	private static KeyMapping openMenuKey;
+	private static KeyMapping cleanMemoryKey;
 
 	public static KeyMapping openMenuKey() {
 		return openMenuKey;
+	}
+
+	public static KeyMapping cleanMemoryKey() {
+		return cleanMemoryKey;
 	}
 
 	@Override
@@ -31,12 +36,22 @@ public class FpsBoostClient implements ClientModInitializer {
 				InputConstants.KEY_H,
 				category
 		));
+		// Клавиша очистки памяти по умолчанию не назначена: выбери её в настройках управления.
+		cleanMemoryKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+				"key.fpsboost.clean_memory",
+				InputConstants.Type.KEYSYM,
+				-1,
+				category
+		));
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (openMenuKey.consumeClick()) {
 				if (client.screen == null) {
 					client.setScreen(new FpsBoostScreen());
 				}
+			}
+			while (cleanMemoryKey.consumeClick()) {
+				MemoryCleaner.run();
 			}
 		});
 

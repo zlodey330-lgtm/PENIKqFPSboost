@@ -12,6 +12,11 @@ import net.minecraft.util.Mth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
+import java.util.function.Supplier;
 
 /**
  * Меню мода (клавиша H): 4 вкладки. Вкладка 1 пока показывает "Скоро...",
@@ -33,7 +38,7 @@ public class FpsBoostScreen extends Screen {
 	private static final int ROW_HOVER = 0xFF232330;
 	private static final int TRACK = 0xFF0C0C11;
 
-	private static final String[] TABS = {"Вкладка 1", "Умная отрисовка", "Оптимизация мобов", "Частицы и мир"};
+	private static final String[] TABS = {"Визуал и FPS", "Умная отрисовка", "Оптимизация мобов", "Частицы и мир"};
 
 	private static final int PANEL_W = 460;
 	private static final int PANEL_H = 264;
@@ -73,6 +78,9 @@ public class FpsBoostScreen extends Screen {
 	protected void init() {
 		px = (this.width - PANEL_W) / 2;
 		py = (this.height - PANEL_H) / 2;
+		if (vRows.isEmpty()) {
+			buildVisualRows();
+		}
 
 		search = new EditBox(this.font, px + 12, py + TAB_H + 28, PANEL_W - 24 - 134 - 6, 16, Component.literal("Поиск"));
 		search.setHint(Component.literal("Поиск моба..."));
@@ -107,6 +115,8 @@ public class FpsBoostScreen extends Screen {
 		draggingSimplify = false;
 		draggingScrollbar = false;
 		pDraggingScrollbar = false;
+		vDraggingScrollbar = false;
+		vDraggingSlider = null;
 	}
 
 	private void rebuildParticles() {
@@ -232,7 +242,7 @@ public class FpsBoostScreen extends Screen {
 		} else if (tab == 1) {
 			renderSmartTab(g, mouseX, mouseY);
 		} else {
-			g.drawCenteredString(this.font, "Скоро...", px + PANEL_W / 2, py + PANEL_H / 2 - 4, TEXT_DIM);
+			renderVisualTab(g, mouseX, mouseY);
 		}
 	}
 
@@ -329,6 +339,259 @@ public class FpsBoostScreen extends Screen {
 		changed = true;
 	}
 
+	// ---------- вкладка 1: Визуал и FPS ----------
+
+	private abstract static class VRow {
+		final int height;
+
+		VRow(int height) {
+			this.height = height;
+		}
+	}
+
+	private static final class VHeading extends VRow {
+		final String text;
+
+		VHeading(String text) {
+			super(24);
+			this.text = text;
+		}
+	}
+
+	private static final class VToggle extends VRow {
+		final String label;
+		final BooleanSupplier get;
+		final Consumer<Boolean> set;
+
+		VToggle(String label, BooleanSupplier get, Consumer<Boolean> set) {
+			super(22);
+			this.label = label;
+			this.get = get;
+			this.set = set;
+		}
+	}
+
+	private static final class VSlider extends VRow {
+		final String label;
+		final IntSupplier get;
+		final IntConsumer set;
+		final int min;
+		final int max;
+
+		VSlider(String label, IntSupplier get, IntConsumer set, int min, int max) {
+			super(22);
+			this.label = label;
+			this.get = get;
+			this.set = set;
+			this.min = min;
+			this.max = max;
+		}
+	}
+
+	private static final class VButton extends VRow {
+		final String label;
+		final String button;
+		final Runnable action;
+		final Supplier<String> info;
+
+		VButton(String label, String button, Runnable action, Supplier<String> info) {
+			super(22);
+			this.label = label;
+			this.button = button;
+			this.action = action;
+			this.info = info;
+		}
+	}
+
+	private static final class VNote extends VRow {
+		final Supplier<String> text;
+
+		VNote(Supplier<String> text) {
+			super(20);
+			this.text = text;
+		}
+	}
+
+	private final List<VRow> vRows = new ArrayList<>();
+	private double vScroll = 0;
+	private boolean vDraggingScrollbar = false;
+	private double vGrabOffset = 0;
+	private VSlider vDraggingSlider = null;
+
+	private void buildVisualRows() {
+		vRows.add(new VHeading("ОГОНЬ И СВЕЧЕНИЕ"));
+		vRows.add(new VToggle("Убрать огонь на мне", () -> MobConfig.hideFireSelf, v -> MobConfig.hideFireSelf = v));
+		vRows.add(new VToggle("Убрать огонь на других", () -> MobConfig.hideFireOthers, v -> MobConfig.hideFireOthers = v));
+		vRows.add(new VToggle("Убрать свечение (эффект «Свечение»)", () -> MobConfig.hideGlow, v -> MobConfig.hideGlow = v));
+
+		vRows.add(new VHeading("АНИМАЦИИ"));
+		vRows.add(new VToggle("Остановить анимацию воды", () -> MobConfig.hideWaterAnim, v -> MobConfig.hideWaterAnim = v));
+		vRows.add(new VToggle("Остановить анимацию лавы", () -> MobConfig.hideLavaAnim, v -> MobConfig.hideLavaAnim = v));
+		vRows.add(new VToggle("Остановить анимацию портала в Ад", () -> MobConfig.hidePortalAnim, v -> MobConfig.hidePortalAnim = v));
+		vRows.add(new VToggle("Убрать анимацию тотема на экране", () -> MobConfig.hideTotemAnim, v -> MobConfig.hideTotemAnim = v));
+		vRows.add(new VToggle("Убрать трещины при ломании блока", () -> MobConfig.hideBreakAnim, v -> MobConfig.hideBreakAnim = v));
+		vRows.add(new VToggle("Предметы на земле без вращения", () -> MobConfig.hideItemSpin, v -> MobConfig.hideItemSpin = v));
+
+		vRows.add(new VHeading("КАМЕРА И КАРТИНКА"));
+		vRows.add(new VToggle("Убрать тряску камеры при уроне", () -> MobConfig.hideHurtCam, v -> MobConfig.hideHurtCam = v));
+		vRows.add(new VToggle("Убрать блеск зачарований", () -> MobConfig.hideEnchantGlint, v -> MobConfig.hideEnchantGlint = v));
+		vRows.add(new VToggle("Убрать туман под водой и в лаве", () -> MobConfig.hideFog, v -> MobConfig.hideFog = v));
+		vRows.add(new VToggle("Убрать тени под мобами", () -> MobConfig.hideShadows, v -> MobConfig.hideShadows = v));
+		vRows.add(new VToggle("Убрать тыкву на экране", () -> MobConfig.hidePumpkin, v -> MobConfig.hidePumpkin = v));
+		vRows.add(new VToggle("Убрать искажение от портала", () -> MobConfig.hidePortalOverlay, v -> MobConfig.hidePortalOverlay = v));
+
+		vRows.add(new VHeading("ТАБЛИЧКИ (64 = текст виден отовсюду)"));
+		vRows.add(new VSlider("Дальность текста табличек", () -> MobConfig.signDistance, v -> MobConfig.signDistance = v,
+				MobConfig.SIGN_MIN, MobConfig.SIGN_MAX));
+
+		vRows.add(new VHeading("ПРЕДМЕТЫ В РУКЕ (100% = обычный размер)"));
+		vRows.add(new VSlider("Тотем", () -> MobConfig.scaleTotem, v -> MobConfig.scaleTotem = v,
+				MobConfig.SCALE_MIN, MobConfig.SCALE_MAX));
+		vRows.add(new VSlider("Меч", () -> MobConfig.scaleSword, v -> MobConfig.scaleSword = v,
+				MobConfig.SCALE_MIN, MobConfig.SCALE_MAX));
+		vRows.add(new VSlider("Щит", () -> MobConfig.scaleShield, v -> MobConfig.scaleShield = v,
+				MobConfig.SCALE_MIN, MobConfig.SCALE_MAX));
+		vRows.add(new VSlider("Зелье (пока пьёшь)", () -> MobConfig.scalePotion, v -> MobConfig.scalePotion = v,
+				MobConfig.SCALE_MIN, MobConfig.SCALE_MAX));
+		vRows.add(new VSlider("Еда (пока ешь)", () -> MobConfig.scaleFood, v -> MobConfig.scaleFood = v,
+				MobConfig.SCALE_MIN, MobConfig.SCALE_MAX));
+
+		vRows.add(new VHeading("ПАМЯТЬ"));
+		vRows.add(new VButton("Очистка памяти", "Очистить", MemoryCleaner::run,
+				() -> "занято " + MemoryCleaner.usedMb() + " / " + MemoryCleaner.maxMb() + " МБ"));
+		vRows.add(new VNote(() -> "Клавиша очистки: "
+				+ KeyBindingHelper.getBoundKeyOf(FpsBoostClient.cleanMemoryKey()).getDisplayName().getString()
+				+ " (меняется в Настройки > Управление > FPS Boost)"));
+	}
+
+	private int vX() {
+		return px + 12;
+	}
+
+	private int vY() {
+		return py + TAB_H + 8;
+	}
+
+	private int vW() {
+		return PANEL_W - 24;
+	}
+
+	private int vH() {
+		return PANEL_H - TAB_H - 16;
+	}
+
+	private int vRowW() {
+		return vW() - SCROLLBAR_W - 4;
+	}
+
+	private int vToggleX() {
+		return vX() + vRowW() - 8 - 40;
+	}
+
+	private int vSliderX() {
+		return vX() + 210;
+	}
+
+	private int vSliderW() {
+		return vRowW() - 210 - 60;
+	}
+
+	private int vContent() {
+		int h = 0;
+		for (VRow row : vRows) {
+			h += row.height;
+		}
+		return h;
+	}
+
+	private double vMax() {
+		return Math.max(0, vContent() - vH());
+	}
+
+	private int vThumbH() {
+		return Math.max(20, (int) (vH() * (vH() / (double) Math.max(1, vContent()))));
+	}
+
+	private int vThumbY() {
+		double max = vMax();
+		if (max <= 0) {
+			return vY();
+		}
+		return vY() + (int) ((vH() - vThumbH()) * (vScroll / max));
+	}
+
+	private void vScrollToThumbTop(double top) {
+		double track = vH() - vThumbH();
+		if (track <= 0) {
+			return;
+		}
+		vScroll = Mth.clamp((top - vY()) / track, 0.0, 1.0) * vMax();
+	}
+
+	private void applyVSlider(VSlider s, double mx) {
+		double t = Mth.clamp((mx - vSliderX()) / vSliderW(), 0.0, 1.0);
+		s.set.accept(s.min + (int) Math.round(t * (s.max - s.min)));
+		changed = true;
+	}
+
+	private void renderVisualTab(GuiGraphics g, int mouseX, int mouseY) {
+		int x = vX(), ly = vY(), lw = vW(), lh = vH(), rw = vRowW();
+		g.enableScissor(x, ly, x + lw, ly + lh);
+		int y = ly - (int) vScroll;
+		for (VRow row : vRows) {
+			if (y + row.height >= ly && y <= ly + lh) {
+				renderVRow(g, row, x, y, rw, mouseX, mouseY);
+			}
+			y += row.height;
+		}
+		g.disableScissor();
+
+		if (vMax() > 0) {
+			int sbx = x + lw - SCROLLBAR_W;
+			int ty = vThumbY();
+			int th = vThumbH();
+			boolean overThumb = inside(mouseX, mouseY, sbx - 4, ty, SCROLLBAR_W + 6, th);
+			g.fill(sbx, ly, sbx + SCROLLBAR_W, ly + lh, TRACK);
+			g.fill(sbx, ty, sbx + SCROLLBAR_W, ty + th, (vDraggingScrollbar || overThumb) ? 0xFFF04A60 : ACCENT);
+		}
+	}
+
+	private void renderVRow(GuiGraphics g, VRow row, int x, int y, int w, int mouseX, int mouseY) {
+		boolean inList = mouseY >= vY() && mouseY < vY() + vH();
+		boolean hover = inList && inside(mouseX, mouseY, x, y, w, row.height - 2);
+
+		if (row instanceof VHeading h) {
+			g.fill(x, y + 5, x + 3, y + h.height - 5, ACCENT);
+			g.drawString(this.font, Component.literal(h.text).withStyle(s -> s.withBold(true)),
+					x + 9, y + 8, TEXT, false);
+		} else if (row instanceof VToggle t) {
+			g.fill(x, y, x + w, y + t.height - 2, hover ? ROW_HOVER : ROW);
+			g.drawString(this.font, t.label, x + 8, y + 7, TEXT, false);
+			renderToggle(g, vToggleX(), y + 3, t.get.getAsBoolean(), mouseX, mouseY);
+		} else if (row instanceof VSlider s) {
+			g.fill(x, y, x + w, y + s.height - 2, (hover || vDraggingSlider == s) ? ROW_HOVER : ROW);
+			g.drawString(this.font, s.label, x + 8, y + 7, TEXT, false);
+			int value = s.get.getAsInt();
+			int sx = vSliderX(), sw = vSliderW(), sy = y + (s.height - 2) / 2 - 2;
+			g.fill(sx, sy, sx + sw, sy + 4, TRACK);
+			int filled = (int) (sw * ((value - s.min) / (double) (s.max - s.min)));
+			g.fill(sx, sy, sx + filled, sy + 4, value >= s.max ? ACCENT_DARK : ACCENT);
+			g.fill(sx + filled - 2, sy - 3, sx + filled + 2, sy + 7, TEXT);
+			String vt = s.max == MobConfig.SIGN_MAX ? (value >= s.max ? "∞" : value + " бл.") : value + "%";
+			g.drawString(this.font, vt, x + w - 44, y + 7, value >= s.max ? TEXT_DIM : TEXT, false);
+		} else if (row instanceof VButton b) {
+			g.fill(x, y, x + w, y + b.height - 2, hover ? ROW_HOVER : ROW);
+			g.drawString(this.font, b.label, x + 8, y + 7, TEXT, false);
+			g.drawString(this.font, b.info.get(), x + 120, y + 7, TEXT_DIM, false);
+			int bx = x + w - 8 - 80;
+			boolean bh = inside(mouseX, mouseY, bx, y + 3, 80, 16) && inList;
+			g.fill(bx, y + 3, bx + 80, y + 19, bh ? ACCENT : ACCENT_DARK);
+			g.drawCenteredString(this.font, b.button, bx + 40, y + 7, TEXT);
+		} else if (row instanceof VNote n) {
+			g.drawString(this.font, n.text.get(), x + 8, y + 6, TEXT_DIM, false);
+		}
+	}
+
 	// ---------- вкладка 4: Частицы и мир ----------
 
 	private static final int PROW_H = 20;
@@ -357,10 +620,6 @@ public class FpsBoostScreen extends Screen {
 
 	private int blockToggleX() {
 		return listX() + listW() - 8 - 40;
-	}
-
-	private int blockExceptionsX() {
-		return blockToggleX() - 4 - 120;
 	}
 
 	private int pListY() {
@@ -444,11 +703,7 @@ public class FpsBoostScreen extends Screen {
 		g.drawString(this.font, Component.literal("Частицы блоков").withStyle(s -> s.withBold(true)),
 				brx + 8, bry + 7, TEXT, false);
 		g.drawString(this.font, "(ломание, удары, бег)", brx + 108, bry + 7, TEXT_DIM, false);
-		int exX = blockExceptionsX(), tgX = blockToggleX();
-		boolean exHover = inside(mouseX, mouseY, exX, bry + 3, 120, 16);
-		g.fill(exX, bry + 3, exX + 120, bry + 19, exHover ? 0xFF2E2E3A : 0xFF24242E);
-		g.drawCenteredString(this.font, "Исключения (" + MobConfig.blockExceptionCount() + ")",
-				exX + 60, bry + 7, TEXT);
+		int tgX = blockToggleX();
 		boolean blocksOff = MobConfig.hideBlockParticles;
 		boolean tgHover = inside(mouseX, mouseY, tgX, bry + 3, 40, 16);
 		g.fill(tgX, bry + 3, tgX + 40, bry + 19,
@@ -521,7 +776,7 @@ public class FpsBoostScreen extends Screen {
 		g.fill(dbx, rby, dbx + 62, rby + 16, dh ? ACCENT : ACCENT_DARK);
 		g.drawCenteredString(this.font, "Откл. всё", dbx + 31, rby + 4, TEXT);
 		g.fill(rbx, rby, rbx + 62, rby + 16, rh ? 0xFF2E2E3A : 0xFF24242E);
-		g.drawCenteredString(this.font, "Сбросить", rbx + 31, rby + 4, TEXT);
+		g.drawCenteredString(this.font, "Вкл. всё", rbx + 31, rby + 4, TEXT);
 
 		search.render(g, mouseX, mouseY, delta);
 
@@ -614,6 +869,10 @@ public class FpsBoostScreen extends Screen {
 				return true;
 			}
 
+			if (tab == 0 && clickVisual(mx, my)) {
+				return true;
+			}
+
 			if (tab == 1) {
 				// переключатели
 				int tx = toggleX();
@@ -675,14 +934,6 @@ public class FpsBoostScreen extends Screen {
 					changed = true;
 					return true;
 				}
-				if (inside(mx, my, blockExceptionsX(), bry + 3, 120, 16)) {
-					if (changed) {
-						MobConfig.save();
-						changed = false;
-					}
-					this.minecraft.setScreen(new BlockExceptionsScreen(this));
-					return true;
-				}
 
 				// полоса прокрутки списка частиц
 				if (pMaxScroll() > 0) {
@@ -723,7 +974,7 @@ public class FpsBoostScreen extends Screen {
 					return true;
 				}
 
-				// "Откл. всё" и "Сбросить"
+				// "Откл. всё" и "Вкл. всё"
 				int rbx = px + PANEL_W - 12 - 62;
 				int rby = py + TAB_H + 28;
 				int dbx = rbx - 4 - 62;
@@ -778,6 +1029,52 @@ public class FpsBoostScreen extends Screen {
 		return super.mouseClicked(event, doubleClick);
 	}
 
+	private boolean clickVisual(double mx, double my) {
+		// полоса прокрутки
+		if (vMax() > 0) {
+			int sbx = vX() + vW() - SCROLLBAR_W;
+			if (inside(mx, my, sbx - 4, vY(), SCROLLBAR_W + 6, vH())) {
+				int ty = vThumbY();
+				int th = vThumbH();
+				if (my >= ty && my < ty + th) {
+					vGrabOffset = my - ty;
+				} else {
+					vGrabOffset = th / 2.0;
+					vScrollToThumbTop(my - vGrabOffset);
+				}
+				vDraggingScrollbar = true;
+				return true;
+			}
+		}
+		if (!inside(mx, my, vX(), vY(), vRowW(), vH())) {
+			return false;
+		}
+		int y = vY() - (int) vScroll;
+		for (VRow row : vRows) {
+			if (my >= y && my < y + row.height - 2) {
+				if (row instanceof VToggle t) {
+					t.set.accept(!t.get.getAsBoolean());
+					changed = true;
+					return true;
+				}
+				if (row instanceof VSlider s) {
+					vDraggingSlider = s;
+					applyVSlider(s, mx);
+					return true;
+				}
+				if (row instanceof VButton b) {
+					if (inside(mx, my, vX() + vRowW() - 8 - 80, y + 3, 80, 16)) {
+						b.action.run();
+						return true;
+					}
+				}
+				return false;
+			}
+			y += row.height;
+		}
+		return false;
+	}
+
 	private MobCatalog.Mob mobAt(double mx, double my) {
 		if (mx < listX() || mx >= listX() + listW() || my < listY() || my >= listY() + listH()) {
 			return null;
@@ -804,6 +1101,14 @@ public class FpsBoostScreen extends Screen {
 
 	@Override
 	public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+		if (vDraggingScrollbar) {
+			vScrollToThumbTop(event.y() - vGrabOffset);
+			return true;
+		}
+		if (vDraggingSlider != null) {
+			applyVSlider(vDraggingSlider, event.x());
+			return true;
+		}
 		if (pDraggingScrollbar) {
 			pScrollToThumbTop(event.y() - pGrabOffset);
 			return true;
@@ -825,6 +1130,14 @@ public class FpsBoostScreen extends Screen {
 
 	@Override
 	public boolean mouseReleased(MouseButtonEvent event) {
+		if (vDraggingScrollbar) {
+			vDraggingScrollbar = false;
+			return true;
+		}
+		if (vDraggingSlider != null) {
+			vDraggingSlider = null;
+			return true;
+		}
 		if (pDraggingScrollbar) {
 			pDraggingScrollbar = false;
 			return true;
@@ -846,6 +1159,10 @@ public class FpsBoostScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+		if (tab == 0) {
+			vScroll = Mth.clamp(vScroll - scrollY * 18, 0, vMax());
+			return true;
+		}
 		if (tab == 3) {
 			pScroll = Mth.clamp(pScroll - scrollY * 18, 0, pMaxScroll());
 			return true;

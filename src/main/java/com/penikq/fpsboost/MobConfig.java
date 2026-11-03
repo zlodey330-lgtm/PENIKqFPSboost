@@ -2,14 +2,13 @@ package com.penikq.fpsboost;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.fabricmc.loader.api.FabricLoader;
-import com.google.gson.JsonArray;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.level.block.Block;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -27,77 +26,76 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * Все настройки мода: дальность отрисовки каждого моба (вкладка 3) и переключатели вкладки 2.
- * Моб, которого нет в таблице, рисуется как обычно (без лимита).
- * Именованные конфиги хранятся в папке config/fpsboost-configs/.
+ * Все настройки мода. Хранятся в config/fpsboost.json, именованные конфиги
+ * лежат в папке config/fpsboost-configs/.
  */
 public final class MobConfig {
-	/** Максимум ползунка. Значение MAX означает "без лимита". */
+	/** Максимум ползунка дальности моба. Значение MAX означает "без лимита". */
 	public static final int MAX = 128;
 
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static final Map<EntityType<?>, Integer> LIMITS = new HashMap<>();
 
-	// Вкладка 2 "Умная отрисовка"
+	// ---------- Вкладка 1 "Визуал и FPS": true = убрать/остановить ----------
+	public static boolean hideFireSelf = false;
+	public static boolean hideFireOthers = false;
+	public static boolean hideGlow = false;
+	public static boolean hideWaterAnim = false;
+	public static boolean hideLavaAnim = false;
+	public static boolean hidePortalAnim = false;
+	public static boolean hideTotemAnim = false;
+	public static boolean hideBreakAnim = false;
+	public static boolean hideItemSpin = false;
+	public static boolean hideHurtCam = false;
+	public static boolean hideEnchantGlint = false;
+	public static boolean hideFog = false;
+	public static boolean hideShadows = false;
+	public static boolean hidePumpkin = false;
+	public static boolean hidePortalOverlay = false;
+	public static final int SIGN_MIN = 4;
+	public static final int SIGN_MAX = 64; // 64 = без лимита
+	public static int signDistance = SIGN_MAX;
+
+	/** Размер предмета в руке в процентах (100 = обычный). */
+	public static final int SCALE_MIN = 20;
+	public static final int SCALE_MAX = 100;
+	public static int scaleTotem = 100;
+	public static int scaleSword = 100;
+	public static int scaleShield = 100;
+	public static int scalePotion = 100;
+	public static int scaleFood = 100;
+
+	// ---------- Вкладка 2 "Умная отрисовка" ----------
 	public static final int SIMPLIFY_MIN = 8;
 	public static final int SIMPLIFY_MAX = 64;
-	/** Упрощать далёких мобов (без брони, предметов в руках и ника). */
 	public static boolean simplifyFar = false;
-	/** С какой дистанции (в блоках) моб считается далёким. */
 	public static int simplifyDistance = 24;
-	/** Не рисовать мобов, скрытых за блоками. */
 	public static boolean occlusionCull = false;
 
-	// Вкладка 4 "Частицы и мир": true = убрать
+	// ---------- Вкладка 4 "Частицы и мир": true = убрать ----------
 	public static boolean hideSky = false;
 	public static boolean hideSunMoonStars = false;
 	public static boolean hideClouds = false;
 	public static boolean hideWeather = false;
-	private static final Set<ParticleType<?>> HIDDEN_PARTICLES = new HashSet<>();
-
 	/** Убрать ВСЕ частицы от блоков (ломание, удары, бег, падение) одной кнопкой. */
 	public static boolean hideBlockParticles = false;
-	/** Важные блоки, частицы которых показываются, даже когда общая кнопка включена. */
-	private static final Set<String> BLOCK_EXCEPTION_IDS = new HashSet<>();
-	/** Кэш: те же исключения, но как объекты блоков. Строится при первом обращении. */
-	private static Set<Block> exceptionBlocks = null;
+	private static final Set<ParticleType<?>> HIDDEN_PARTICLES = new HashSet<>();
 
 	private MobConfig() {
 	}
 
-	// ---------- частицы блоков ----------
-
-	public static boolean isBlockExceptionId(String id) {
-		return BLOCK_EXCEPTION_IDS.contains(id);
+	private static Path file() {
+		return FabricLoader.getInstance().getConfigDir().resolve("fpsboost.json");
 	}
 
-	public static void setBlockExceptionId(String id, boolean on) {
-		if (on) {
-			BLOCK_EXCEPTION_IDS.add(id);
-		} else {
-			BLOCK_EXCEPTION_IDS.remove(id);
-		}
-		exceptionBlocks = null;
+	private static Path profilesDir() {
+		return FabricLoader.getInstance().getConfigDir().resolve("fpsboost-configs");
 	}
 
-	public static int blockExceptionCount() {
-		return BLOCK_EXCEPTION_IDS.size();
-	}
+	// ---------- руки: быстрая проверка для рендера ----------
 
-	public static boolean isBlockException(Block block) {
-		if (BLOCK_EXCEPTION_IDS.isEmpty()) {
-			return false;
-		}
-		if (exceptionBlocks == null) {
-			Set<Block> set = new HashSet<>();
-			for (Block b : BuiltInRegistries.BLOCK) {
-				if (BLOCK_EXCEPTION_IDS.contains(BuiltInRegistries.BLOCK.getKey(b).toString())) {
-					set.add(b);
-				}
-			}
-			exceptionBlocks = set;
-		}
-		return exceptionBlocks.contains(block);
+	public static boolean handScalingActive() {
+		return scaleTotem < 100 || scaleSword < 100 || scaleShield < 100 || scalePotion < 100 || scaleFood < 100;
 	}
 
 	// ---------- частицы ----------
@@ -126,14 +124,6 @@ public final class MobConfig {
 		HIDDEN_PARTICLES.clear();
 	}
 
-	private static Path file() {
-		return FabricLoader.getInstance().getConfigDir().resolve("fpsboost.json");
-	}
-
-	private static Path profilesDir() {
-		return FabricLoader.getInstance().getConfigDir().resolve("fpsboost-configs");
-	}
-
 	// ---------- дальности мобов ----------
 
 	/** Есть ли вообще заданные лимиты (быстрая проверка для рендера). */
@@ -159,6 +149,7 @@ public final class MobConfig {
 		}
 	}
 
+	/** "Вкл. всё": всем мобам возвращается обычная дальность (без лимита). */
 	public static void resetAll() {
 		LIMITS.clear();
 	}
@@ -178,49 +169,95 @@ public final class MobConfig {
 			distances.addProperty(BuiltInRegistries.ENTITY_TYPE.getKey(entry.getKey()).toString(), entry.getValue());
 		}
 		JsonObject root = new JsonObject();
+
+		root.addProperty("hideFireSelf", hideFireSelf);
+		root.addProperty("hideFireOthers", hideFireOthers);
+		root.addProperty("hideGlow", hideGlow);
+		root.addProperty("hideWaterAnim", hideWaterAnim);
+		root.addProperty("hideLavaAnim", hideLavaAnim);
+		root.addProperty("hidePortalAnim", hidePortalAnim);
+		root.addProperty("hideTotemAnim", hideTotemAnim);
+		root.addProperty("hideBreakAnim", hideBreakAnim);
+		root.addProperty("hideItemSpin", hideItemSpin);
+		root.addProperty("hideHurtCam", hideHurtCam);
+		root.addProperty("hideEnchantGlint", hideEnchantGlint);
+		root.addProperty("hideFog", hideFog);
+		root.addProperty("hideShadows", hideShadows);
+		root.addProperty("hidePumpkin", hidePumpkin);
+		root.addProperty("hidePortalOverlay", hidePortalOverlay);
+		root.addProperty("signDistance", signDistance);
+		root.addProperty("scaleTotem", scaleTotem);
+		root.addProperty("scaleSword", scaleSword);
+		root.addProperty("scaleShield", scaleShield);
+		root.addProperty("scalePotion", scalePotion);
+		root.addProperty("scaleFood", scaleFood);
+
 		root.addProperty("simplifyFar", simplifyFar);
 		root.addProperty("simplifyDistance", simplifyDistance);
 		root.addProperty("occlusionCull", occlusionCull);
+
 		root.addProperty("hideSky", hideSky);
 		root.addProperty("hideSunMoonStars", hideSunMoonStars);
 		root.addProperty("hideClouds", hideClouds);
 		root.addProperty("hideWeather", hideWeather);
+		root.addProperty("hideBlockParticles", hideBlockParticles);
 		JsonArray hidden = new JsonArray();
 		for (ParticleType<?> type : HIDDEN_PARTICLES) {
 			hidden.add(BuiltInRegistries.PARTICLE_TYPE.getKey(type).toString());
 		}
 		root.add("hiddenParticles", hidden);
-		root.addProperty("hideBlockParticles", hideBlockParticles);
-		JsonArray exceptions = new JsonArray();
-		for (String id : BLOCK_EXCEPTION_IDS) {
-			exceptions.add(id);
-		}
-		root.add("blockParticleExceptions", exceptions);
+
 		root.add("mobDistances", distances);
 		return root;
 	}
 
+	private static boolean flag(JsonObject root, String key) {
+		return root.has(key) && root.get(key).getAsBoolean();
+	}
+
+	private static int scale(JsonObject root, String key) {
+		if (!root.has(key)) {
+			return 100;
+		}
+		return Math.max(SCALE_MIN, Math.min(SCALE_MAX, root.get(key).getAsInt()));
+	}
+
 	private static void fromJson(JsonObject root) {
 		LIMITS.clear();
-		if (root.has("simplifyFar")) {
-			simplifyFar = root.get("simplifyFar").getAsBoolean();
-		}
+
+		hideFireSelf = flag(root, "hideFireSelf");
+		hideFireOthers = flag(root, "hideFireOthers");
+		hideGlow = flag(root, "hideGlow");
+		hideWaterAnim = flag(root, "hideWaterAnim");
+		hideLavaAnim = flag(root, "hideLavaAnim");
+		hidePortalAnim = flag(root, "hidePortalAnim");
+		hideTotemAnim = flag(root, "hideTotemAnim");
+		hideBreakAnim = flag(root, "hideBreakAnim");
+		hideItemSpin = flag(root, "hideItemSpin");
+		hideHurtCam = flag(root, "hideHurtCam");
+		hideEnchantGlint = flag(root, "hideEnchantGlint");
+		hideFog = flag(root, "hideFog");
+		hideShadows = flag(root, "hideShadows");
+		hidePumpkin = flag(root, "hidePumpkin");
+		hidePortalOverlay = flag(root, "hidePortalOverlay");
+		signDistance = root.has("signDistance") ? Math.max(SIGN_MIN, Math.min(SIGN_MAX, root.get("signDistance").getAsInt())) : SIGN_MAX;
+		scaleTotem = scale(root, "scaleTotem");
+		scaleSword = scale(root, "scaleSword");
+		scaleShield = scale(root, "scaleShield");
+		scalePotion = scale(root, "scalePotion");
+		scaleFood = scale(root, "scaleFood");
+
+		simplifyFar = flag(root, "simplifyFar");
 		if (root.has("simplifyDistance")) {
 			simplifyDistance = Math.max(SIMPLIFY_MIN, Math.min(SIMPLIFY_MAX, root.get("simplifyDistance").getAsInt()));
 		}
-		if (root.has("occlusionCull")) {
-			occlusionCull = root.get("occlusionCull").getAsBoolean();
-		}
-		hideSky = root.has("hideSky") && root.get("hideSky").getAsBoolean();
-		hideSunMoonStars = root.has("hideSunMoonStars") && root.get("hideSunMoonStars").getAsBoolean();
-		hideClouds = root.has("hideClouds") && root.get("hideClouds").getAsBoolean();
-		hideWeather = root.has("hideWeather") && root.get("hideWeather").getAsBoolean();
-		hideBlockParticles = root.has("hideBlockParticles") && root.get("hideBlockParticles").getAsBoolean();
-		BLOCK_EXCEPTION_IDS.clear();
-		exceptionBlocks = null;
-		if (root.has("blockParticleExceptions")) {
-			root.getAsJsonArray("blockParticleExceptions").forEach(e -> BLOCK_EXCEPTION_IDS.add(e.getAsString()));
-		}
+		occlusionCull = flag(root, "occlusionCull");
+
+		hideSky = flag(root, "hideSky");
+		hideSunMoonStars = flag(root, "hideSunMoonStars");
+		hideClouds = flag(root, "hideClouds");
+		hideWeather = flag(root, "hideWeather");
+		hideBlockParticles = flag(root, "hideBlockParticles");
 		HIDDEN_PARTICLES.clear();
 		if (root.has("hiddenParticles")) {
 			Set<String> ids = new HashSet<>();
@@ -231,6 +268,7 @@ public final class MobConfig {
 				}
 			}
 		}
+
 		if (!root.has("mobDistances")) {
 			return;
 		}
